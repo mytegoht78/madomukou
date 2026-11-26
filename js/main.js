@@ -20,12 +20,16 @@ const mobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad/i
 const KEY = 'madomukou.v1';
 const DEF = {
   scene: 'washitsu', frameSpace: true, framePhoto: false,
-  gain: mobile ? 1.5 : 2, tiltGain: 1, approach: 1.5,
+  gain: 1, tiltGain: 1, approach: 1,      // 実際の頭の動きと1対1（誇張しない）
   cmPerPx: mobile ? 2.54 / 160 : 34 / Math.max(800, screen.width || 1440),
-  D: 20, zoom: 1, hole: 'auto', tilt: true, showCam: true, seenIntro: false,
+  D: 20, zoom: 1, hole: 'auto', tilt: true, showCam: true, seenIntro: false, ver: 2,
 };
 const st = { ...DEF };
-try { Object.assign(st, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* 保存なしで動く */ }
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { /* 保存なしで動く */ }
+if (saved) Object.assign(st, saved);
+// 第1版は動きを誇張する初期値（顔 1.5〜2倍・近づき 1.5倍）だったので、一度だけ1対1に直す
+if (saved && (saved.ver || 1) < 2) { st.gain = 1; st.approach = 1; st.ver = 2; try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* 保存できなくても動く */ } }
 let saveT = 0;
 function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* 保存できなくても動く */ } }, 300); }
 
