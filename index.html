@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<!-- 外部への通信をブラウザに禁止させる（自分のサーバーのファイルと、ページ内の data:/blob: だけ許可） -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0a0b10">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235a3f28'/%3E%3Crect x='9' y='9' width='46' height='46' rx='3' fill='%23cfe6f5'/%3E%3Cpath d='M9 40h46v15H9z' fill='%235f8a3e'/%3E%3Cpath d='M9 33l12-9 10 7 9-6 15 9v6H9z' fill='%238ea7b3'/%3E%3Cpath d='M32 9v46M9 32h46' stroke='%23e8d8b8' stroke-width='3'/%3E%3Crect x='9' y='9' width='46' height='46' rx='3' fill='none' stroke='%23a07a52' stroke-width='5'/%3E%3C/svg%3E">
+<title>窓のむこう</title>
+<style>
+  :root {
+    --bg: #0a0b10;
+    --glass: rgba(20, 22, 30, .78);
+    --glass-solid: rgba(18, 20, 27, .9);
+    --glass-2: rgba(255, 255, 255, .07);
+    --line: rgba(255, 255, 255, .12);
+    --fg: #f3f1ec;
+    --dim: #a7a9b4;
+    --accent: #f0b46a;
+    --accent-ink: #2a1a06;
+    --r: 18px;
+    --sans: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", "Meiryo", system-ui, sans-serif;
+    --serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--sans); overflow: hidden; overscroll-behavior: none; }
+  canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  canvas#view.picking { cursor: crosshair; }
+  button { font: inherit; color: inherit; }
+  button:focus-visible, label:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 下の操作バー */
+  #dock {
+    position: fixed; left: 50%; bottom: calc(14px + var(--safe-b)); transform: translateX(-50%);
+    display: flex; gap: 2px; padding: 6px; border-radius: 22px;
+    background: var(--glass); border: 1px solid var(--line);
+    backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    transition: opacity .35s ease, transform .35s ease; z-index: 5;
+  }
+  #dock button {
+    width: 64px; height: 54px; border: 0; border-radius: 16px; background: transparent; cursor: pointer;
+    display: grid; place-items: center; align-content: center; gap: 3px; color: var(--dim);
+    font-size: 11px; letter-spacing: .04em; transition: background .15s, color .15s;
+  }
+  #dock button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  #dock button:hover { background: var(--glass-2); color: var(--fg); }
+  #dock button[aria-expanded="true"], #dock button[aria-pressed="true"] { color: var(--accent); }
+  #dock button[aria-expanded="true"] { background: rgba(240,180,106,.12); }
+  body.ui-hidden #dock { opacity: 0; transform: translate(-50%, 12px); pointer-events: none; }
+
+  /* 下から出るパネル */
+  .sheet {
+    position: fixed; left: 50%; bottom: calc(84px + var(--safe-b)); transform: translateX(-50%);
+    width: min(460px, calc(100vw - 24px)); max-height: calc(100dvh - 110px - var(--safe-b)); overflow: auto;
+    background: var(--glass-solid); border: 1px solid var(--line); border-radius: var(--r);
+    backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    box-shadow: 0 16px 40px rgba(0,0,0,.4);
+    padding: 14px 16px 16px; z-index: 6; animation: rise .22s ease;
+    scrollbar-width: thin;
+  }
+  @keyframes rise { from { opacity: 0; transform: translate(-50%, 10px); } }
+  .sheet header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .sheet h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .08em; }
+  .sheet h3 { font-size: 11px; font-weight: 600; color: var(--dim); letter-spacing: .12em; margin: 16px 0 8px; }
+  .sheet h3:first-child { margin-top: 2px; }
+  .x { width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--glass-2); cursor: pointer; display: grid; place-items: center; }
+  .x svg { width: 14px; height: 14px; stroke: var(--fg); stroke-width: 2; }
+
+  /* 景色のカード */
+  #cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+  .card {
+    display: grid; gap: 4px; text-align: left; padding: 8px 8px 10px; border-radius: 14px; cursor: pointer;
+    background: var(--glass-2); border: 1px solid transparent; transition: border-color .15s, background .15s;
+  }
+  .card:hover { background: rgba(255,255,255,.11); }
+  .card[aria-pressed="true"] { border-color: var(--accent); }
+  .card .thumb { height: 66px; border-radius: 9px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .card .name { font-size: 13px; font-weight: 600; margin-top: 4px; }
+  .card .sub { font-size: 11px; color: var(--dim); line-height: 1.45; }
+  .card.file { place-content: center; justify-items: center; text-align: center; border: 1px dashed rgba(255,255,255,.25); min-height: 118px; }
+  .card.file svg { width: 26px; height: 26px; stroke: var(--accent); fill: none; stroke-width: 1.7; }
+
+  /* 切り替えスイッチの行 */
+  .opt { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .opt b { font-size: 14px; font-weight: 600; display: block; }
+  .opt small { font-size: 11px; color: var(--dim); line-height: 1.5; display: block; margin-top: 2px; }
+  [role="switch"] {
+    flex: none; width: 48px; height: 28px; border-radius: 14px; border: 0; cursor: pointer; position: relative;
+    background: rgba(255,255,255,.18); transition: background .2s;
+  }
+  [role="switch"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  [role="switch"][aria-checked="true"] { background: var(--accent); }
+  [role="switch"][aria-checked="true"]::after { transform: translateX(20px); }
+  [role="switch"]:disabled { opacity: .4; cursor: default; }
+  .meta { font-size: 11px; color: var(--dim); margin: 10px 0 0; font-variant-numeric: tabular-nums; min-height: 1.4em; }
+  .hint { font-size: 11px; color: var(--dim); margin: 10px 0 0; line-height: 1.6; }
+  .btn {
+    border: 1px solid var(--line); background: var(--glass-2); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-size: 13px;
+  }
+  .btn:hover { background: rgba(255,255,255,.13); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+  /* スライダー */
+  .range { display: grid; gap: 6px; margin: 12px 0; }
+  .range span { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+  .range output { color: var(--fg); font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.2); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.2); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--fg); margin-top: -8px; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--fg); border: 0; }
+
+  /* 切り替えボタン群 */
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 12px; background: rgba(0,0,0,.25); }
+  .seg button { border: 0; background: transparent; border-radius: 9px; padding: 8px 0; font-size: 12px; cursor: pointer; color: var(--dim); }
+  .seg button[aria-pressed="true"] { background: rgba(255,255,255,.14); color: var(--fg); }
+  .sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); }
+  .sw.pend { border: 2px dashed var(--accent); }
+  #swatches { display: flex; gap: 6px; flex-wrap: wrap; min-height: 22px; margin-top: 8px; }
+
+  /* お知らせ */
+  #toast {
+    position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; transform: translate(-50%, -8px);
+    max-width: min(520px, calc(100vw - 32px)); padding: 9px 16px; border-radius: 999px;
+    background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    font-size: 13px; line-height: 1.5; text-align: center; opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s; z-index: 8;
+  }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  /* カメラ映像（小さく） */
+  #cam { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: 120px; border-radius: 12px; border: 1px solid var(--line); transform: scaleX(-1); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 4; }
+  #cam.on { opacity: .85; }
+  body.ui-hidden #cam.on { opacity: .35; }
+
+  #drop { position: fixed; inset: 0; display: none; place-items: center; background: rgba(10,11,16,.7); font-size: 20px; letter-spacing: .12em; border: 3px dashed var(--accent); z-index: 9; }
+  #drop.on { display: grid; }
+
+  /* はじめの案内 */
+  #intro { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: radial-gradient(ellipse at center, rgba(10,11,16,.25), rgba(10,11,16,.75)); z-index: 10; }
+  #intro .box {
+    width: min(420px, 100%); padding: 28px 24px 22px; border-radius: 24px; text-align: center;
+    background: var(--glass-solid); border: 1px solid var(--line); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    box-shadow: 0 24px 60px rgba(0,0,0,.5); animation: rise2 .5s ease;
+  }
+  @keyframes rise2 { from { opacity: 0; transform: translateY(14px); } }
+  #intro h1 { font-family: var(--serif); font-weight: 500; font-size: 30px; letter-spacing: .28em; margin: 4px 0 6px; padding-left: .28em; }
+  #intro .lead { color: var(--dim); font-size: 13px; margin: 0 0 18px; letter-spacing: .06em; }
+  #intro ul { list-style: none; padding: 0; margin: 0 0 22px; text-align: left; display: grid; gap: 10px; font-size: 13px; line-height: 1.6; }
+  #intro li { display: flex; gap: 10px; align-items: flex-start; }
+  #intro li::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: .6em; }
+  #intro .actions { display: grid; gap: 8px; }
+  .primary { border: 0; border-radius: 14px; padding: 13px; font-size: 15px; font-weight: 600; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  .primary:hover { filter: brightness(1.07); }
+  .ghost { border: 1px solid var(--line); border-radius: 14px; padding: 12px; font-size: 14px; background: transparent; cursor: pointer; }
+  .ghost:hover { background: var(--glass-2); }
+  #intro .note { font-size: 11px; color: var(--dim); margin: 14px 0 0; line-height: 1.6; }
+
+  @media (max-width: 380px) { #dock button { width: 56px; } }
+  @media (max-height: 460px) and (orientation: landscape) {
+    #dock { bottom: calc(8px + var(--safe-b)); }
+    #dock button { height: 46px; font-size: 10px; }
+    .sheet { bottom: calc(68px + var(--safe-b)); max-height: calc(100dvh - 84px); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<canvas id="view" aria-label="窓のむこうの景色"></canvas>
+<video id="cam" playsinline muted></video>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<nav id="dock" aria-label="操作">
+  <button type="button" data-sheet="scenes" aria-expanded="false" aria-controls="sheet-scenes">
+    <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>景色</button>
+  <button type="button" data-sheet="view" aria-expanded="false" aria-controls="sheet-view">
+    <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>覗き方</button>
+  <button type="button" id="frameBtn" aria-pressed="true">
+    <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M12 3.5v17M3.5 12h17"/></svg>窓枠</button>
+  <button type="button" data-sheet="adjust" aria-expanded="false" aria-controls="sheet-adjust">
+    <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>調整</button>
+  <button type="button" id="fsBtn" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>全画面</button>
+</nav>
+
+<section class="sheet" id="sheet-scenes" hidden aria-label="景色をえらぶ">
+  <header><h2>景色をえらぶ</h2><button type="button" class="x" aria-label="閉じる"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12"/></svg></button></header>
+  <div id="cards"></div>
+  <h3>手持ちの写真</h3>
+  <label class="card file" style="min-height:auto;padding:14px">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg>
+    <span class="name">写真を選んで立体にする</span>
+    <span class="sub">奥行きはこの端末の中で推定します（初回は約120MB読み込み）。ドラッグ＆ドロップでも開けます。</span>
+    <input type="file" id="file" accept="image/*" hidden>
+  </label>
+</section>
+
+<section class="sheet" id="sheet-view" hidden aria-label="覗き方">
+  <header><h2>覗き方</h2><button type="button" class="x" aria-label="閉じる"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12"/></svg></button></header>
+  <div class="opt">
+    <div><b>顔の動きで覗く</b><small>インカメラで目の位置と距離を測ります。顔を近づけると、窓に近寄ったように広く見えます。映像は外に送りません。</small></div>
+    <button type="button" role="switch" id="faceSw" aria-checked="false" aria-label="顔の動きで覗く"></button>
+  </div>
+  <div class="opt" id="tiltRow" hidden>
+    <div><b>傾きで覗く</b><small>スマホを傾けると奥が見えます。顔の動きと一緒に使うと、動きがなめらかになります。</small></div>
+    <button type="button" role="switch" id="tiltSw" aria-checked="false" aria-label="傾きで覗く"></button>
+  </div>
+  <div class="opt">
+    <div><b>カメラ映像を小さく表示</b><small>顔がうまく写っているかの確認用です。</small></div>
+    <button type="button" role="switch" id="camSw" aria-checked="true" aria-label="カメラ映像を小さく表示"></button>
+  </div>
+  <p class="meta" id="trackInfo"></p>
+  <div class="row"><button type="button" class="btn" id="recenterBtn">正面をリセット</button><button type="button" class="btn" id="helpBtn">使い方</button></div>
+  <p class="hint" id="howto"></p>
+</section>
+
+<section class="sheet" id="sheet-adjust" hidden aria-label="調整">
+  <header><h2>調整</h2><button type="button" class="x" aria-label="閉じる"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12"/></svg></button></header>
+  <div id="photoGroup" hidden>
+    <h3>写真</h3>
+    <label class="range"><span>奥行きの強さ<output id="rDO"></output></span><input type="range" id="rD" min="2" max="60" step="1"></label>
+    <label class="range"><span>写真の大きさ<output id="rZoomO"></output></span><input type="range" id="rZoom" min="0.4" max="2" step="0.05"></label>
+    <div class="range"><span>手前の物の裏（穴）の埋め方</span>
+      <div class="seg" id="holeSeg" role="group" aria-label="穴の埋め方">
+        <button type="button" data-v="auto">自動</button><button type="button" data-v="blur">ぼかし</button><button type="button" data-v="black">黒</button><button type="button" data-v="dropper">スポイト</button>
+      </div>
+    </div>
+    <div id="dropperBox" hidden>
+      <p class="hint" id="dropperHint"></p>
+      <div id="swatches"></div>
+      <div class="row"><button type="button" class="btn" id="dUndo">ひとつ戻す</button><button type="button" class="btn" id="dClear">全部消す</button></div>
+    </div>
+  </div>
+  <h3>動き</h3>
+  <label class="range"><span>顔の動きの大きさ<output id="rGainO"></output></span><input type="range" id="rGain" min="0.5" max="4" step="0.1"></label>
+  <label class="range"><span>傾きの効き<output id="rTiltO"></output></span><input type="range" id="rTilt" min="0.3" max="3" step="0.1"></label>
+  <label class="range"><span>近づいたときの広がり<output id="rApproachO"></output></span><input type="range" id="rApproach" min="0" max="3" step="0.1"></label>
+  <h3>画面</h3>
+  <label class="range"><span>画面の横幅（実寸に近いほど自然）<output id="rWO"></output></span><input type="range" id="rW" step="0.5"></label>
+  <div class="row"><button type="button" class="btn" id="resetBtn">初期値に戻す</button></div>
+</section>
+
+<div id="drop">写真をドロップ</div>
+
+<div id="intro" hidden>
+  <div class="box" role="dialog" aria-labelledby="introTitle">
+    <h1 id="introTitle">窓のむこう</h1>
+    <p class="lead">画面の奥に、もうひとつの景色を。</p>
+    <ul id="introPC">
+      <li>画面を窓に見立てて、その奥の景色を覗きます。</li>
+      <li>マウスで視点が動き、ホイールで窓に近づけます。</li>
+      <li>カメラを使うと、頭の動きや顔の近さに合わせて見え方が変わります。</li>
+    </ul>
+    <ul id="introMobile">
+      <li>画面を窓に見立てて、その奥の景色を覗きます。</li>
+      <li>スマホを傾けると、窓の奥が見えます。</li>
+      <li>カメラを使うと、顔の動きや近さにも合わせて見え方が変わります。</li>
+    </ul>
+    <div class="actions">
+      <button type="button" class="primary" id="introCam">カメラを使って覗く</button>
+      <button type="button" class="ghost" id="introGo">カメラなしで始める</button>
+    </div>
+    <p class="note">カメラの映像と写真は、この端末の外に送りません。</p>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
